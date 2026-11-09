@@ -1,10 +1,10 @@
 name: rapid_image
 description: >-
-  Faster PNG encoding for package:image. A drop-in import that filters and
-  compresses PNG data in Rust, in parallel on every core.
-version: 0.2.0
+  package:image, faster: a drop-in import that runs PNG and JPEG coding,
+  resizing, rotation, blur and colour adjustment in Rust, in parallel.
+version: 0.3.0
 repository: https://github.com/vishaaalls/rapid_image
-topics: [image, png, performance, compression]
+topics: [image, png, jpeg, performance, resize]
 
 environment:
   sdk: ^3.6.0

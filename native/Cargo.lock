@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "rapid_image"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "crc32fast",
  "fast_image_resize",

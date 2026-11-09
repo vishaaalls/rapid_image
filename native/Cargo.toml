@@ -1,8 +1,8 @@
 [package]
 name = "rapid_image"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
-description = "Rust core for the rapid_image Dart package: PNG row filtering and compression."
+description = "Rust core for the rapid_image Dart package: PNG and JPEG coding, resizing and filters."
 license = "MIT"
 
 [lib]
