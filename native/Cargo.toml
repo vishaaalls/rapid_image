@@ -1,0 +1,25 @@
+[package]
+name = "rapid_image"
+version = "0.2.0"
+edition = "2024"
+description = "Rust core for the rapid_image Dart package: PNG row filtering and compression."
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
+libdeflate-sys = "1.26"
+rayon = "1.10"
+crc32fast = "1.4"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[dev-dependencies]
+flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
