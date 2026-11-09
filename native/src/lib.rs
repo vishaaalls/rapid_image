@@ -8,6 +8,9 @@
 //! stream. The single-core path filters everything and compresses it with
 //! libdeflate, which is faster and smaller than zlib.
 
+pub mod ops;
+mod ops_ffi;
+
 use std::cell::RefCell;
 use std::ptr::NonNull;
 
