@@ -681,6 +681,18 @@ pub struct Adjust {
     pub amount: f64,
 }
 
+/// Dart's `num.clamp`: NaN compares above everything, so it clamps to `hi`.
+#[inline]
+fn dclamp(v: f64, lo: f64, hi: f64) -> f64 {
+    if v.is_nan() || v > hi {
+        hi
+    } else if v < lo {
+        lo
+    } else {
+        v
+    }
+}
+
 /// Dart's `min`/`max` for doubles that aren't NaN.
 #[inline]
 fn dmin(a: f64, b: f64) -> f64 {
@@ -715,7 +727,7 @@ fn rgb_to_hsv(r: f64, g: f64, b: f64) -> [f64; 3] {
 
 fn hsv_to_rgb(mut h: f64, s: f64, v: f64) -> [f64; 3] {
     if s == 0.0 {
-        let g = v.clamp(0.0, 1.0);
+        let g = dclamp(v, 0.0, 1.0);
         return [g, g, g];
     }
     while h < 0.0 {
@@ -727,9 +739,9 @@ fn hsv_to_rgb(mut h: f64, s: f64, v: f64) -> [f64; 3] {
     h /= 60.0;
     let i = h.floor();
     let f = h - i;
-    let p = (v * (1.0 - s)).clamp(0.0, 1.0);
-    let q = (v * (1.0 - s * f)).clamp(0.0, 1.0);
-    let t = (v * (1.0 - s * (1.0 - f))).clamp(0.0, 1.0);
+    let p = dclamp(v * (1.0 - s), 0.0, 1.0);
+    let q = dclamp(v * (1.0 - s * f), 0.0, 1.0);
+    let t = dclamp(v * (1.0 - s * (1.0 - f)), 0.0, 1.0);
     match i as i64 {
         0 => [v, t, p],
         1 => [q, v, p],
@@ -767,7 +779,7 @@ pub fn adjust_color(img: &mut Img, a: Adjust) {
         c
     };
     let mix = |x: f64, y: f64| x * (1.0 - amount) + y * amount;
-    let store = |c: f64| (c.clamp(0.0, 1.0) * 255.0).clamp(0.0, 255.0) as u8;
+    let store = |c: f64| dclamp(dclamp(c, 0.0, 1.0) * 255.0, 0.0, 255.0) as u8;
     let nc = img.nc;
 
     if a.saturation.is_none() && a.hue.is_none() {

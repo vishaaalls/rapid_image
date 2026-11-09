@@ -1,7 +1,13 @@
-// Web: no native code; the encoder falls back to recompressing image's output.
+// Web: no native code. The PNG encoder falls back to recompressing image's
+// output, and the other operations use package:image.
 import 'dart:typed_data';
 
+import 'native_ops.dart';
+
 const nativePngAvailable = false;
+
+/// No native operations on this platform.
+const NativeOps? nativeOps = null;
 
 Uint8List encodeIdat(Uint8List src,
         {required int height,
