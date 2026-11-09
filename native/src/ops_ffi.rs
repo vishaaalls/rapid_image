@@ -28,6 +28,26 @@ unsafe fn put(out: *mut *mut Img, img: Img) -> i32 {
     OK
 }
 
+/// Frees a buffer returned by `ri_png_encode`, `ri_jpeg_encode` or
+/// `ri_alloc`.
+///
+/// # Safety
+/// `p` and `len` must come from one of those calls.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ri_free(p: *mut u8, len: usize) {
+    if !p.is_null() {
+        drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(p, len)) });
+    }
+}
+
+/// Allocates `len` zeroed bytes, for callers that must copy input into this
+/// library's memory first (JavaScript, with the WebAssembly build). Free
+/// with `ri_free`.
+#[unsafe(no_mangle)]
+pub extern "C" fn ri_alloc(len: usize) -> *mut u8 {
+    Box::into_raw(vec![0u8; len].into_boxed_slice()) as *mut u8
+}
+
 /// Copies `w` x `h` pixels of `nc` channels (rows packed) into a new image.
 ///
 /// # Safety

@@ -9,14 +9,27 @@ license = "MIT"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
-libdeflate-sys = "1.26"
-rayon = "1.10"
-crc32fast = "1.4"
 zune-jpeg = "0.4"
 jpeg-encoder = "0.6"
 png = "0.17"
-fast_image_resize = { version = "5", features = ["rayon"] }
+
+# Native: rayon for every core. The WebAssembly build is single-threaded, so
+# it leaves rayon out (ops.rs has a sequential stand-in).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.rayon]
+version = "1.10"
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.fast_image_resize]
+version = "5"
+features = ["rayon"]
+[target.'cfg(target_arch = "wasm32")'.dependencies.fast_image_resize]
+version = "5"
+default-features = false
+
+# The PNG encoder (native only): libdeflate is C, which the WebAssembly build
+# leaves out.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
+libdeflate-sys = "1.26"
+crc32fast = "1.4"
 
 [profile.release]
 opt-level = 3

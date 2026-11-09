@@ -15,7 +15,31 @@
 //! Images are 8-bit, 1 to 4 interleaved channels, rows packed with no padding,
 //! the layout package:image uses for `Format.uint8`.
 
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
+
+/// The WebAssembly build has no threads: the same row loops, run in order.
+#[cfg(target_arch = "wasm32")]
+mod seq {
+    pub trait ParSlice<T> {
+        fn par_chunks(&self, n: usize) -> std::slice::Chunks<'_, T>;
+    }
+    pub trait ParSliceMut<T> {
+        fn par_chunks_mut(&mut self, n: usize) -> std::slice::ChunksMut<'_, T>;
+    }
+    impl<T> ParSlice<T> for [T] {
+        fn par_chunks(&self, n: usize) -> std::slice::Chunks<'_, T> {
+            self.chunks(n)
+        }
+    }
+    impl<T> ParSliceMut<T> for [T] {
+        fn par_chunks_mut(&mut self, n: usize) -> std::slice::ChunksMut<'_, T> {
+            self.chunks_mut(n)
+        }
+    }
+}
+#[cfg(target_arch = "wasm32")]
+use seq::*;
 
 /// An 8-bit image with `nc` interleaved channels.
 pub struct Img {
