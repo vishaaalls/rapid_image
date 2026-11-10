@@ -13,16 +13,14 @@ zune-jpeg = "0.4"
 jpeg-encoder = "0.6"
 png = "0.17"
 
-# Native: rayon for every core. The WebAssembly build is single-threaded, so
-# it leaves rayon out (ops.rs has a sequential stand-in).
+# Native: rayon for every core, and fast_image_resize's SIMD resampling. The
+# WebAssembly build is single-threaded and leaves both out to stay small
+# (ops.rs has a sequential stand-in and its own resampler).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.rayon]
 version = "1.10"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.fast_image_resize]
 version = "5"
 features = ["rayon"]
-[target.'cfg(target_arch = "wasm32")'.dependencies.fast_image_resize]
-version = "5"
-default-features = false
 
 # The PNG encoder (native only): libdeflate is C, which the WebAssembly build
 # leaves out.

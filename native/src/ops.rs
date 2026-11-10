@@ -363,6 +363,7 @@ fn cubic(dx: f64, ipp: f64, icp: f64, inp: f64, iap: f64) -> f64 {
 
 /// High-quality resampling with fast_image_resize (SIMD, all cores). Alpha
 /// is premultiplied while filtering, so transparent pixels don't bleed.
+#[cfg(not(target_arch = "wasm32"))]
 fn resize_hq(img: &Img, w: usize, h: usize, mode: ResizeMode) -> Img {
     use fast_image_resize::images::{Image, ImageRef};
     use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
@@ -390,6 +391,129 @@ fn resize_hq(img: &Img, w: usize, h: usize, mode: ResizeMode) -> Img {
         .expect("resize");
     out.data = dst.into_vec();
     out
+}
+
+/// The WebAssembly build's resampler: separable convolution with the same
+/// filters as fast_image_resize (whose SIMD code is 0.75 MB of wasm), alpha
+/// premultiplied. Results are close to the native ones, not identical.
+#[cfg(target_arch = "wasm32")]
+fn resize_hq(img: &Img, w: usize, h: usize, mode: ResizeMode) -> Img {
+    let (filter, support): (fn(f64) -> f64, f64) = match mode {
+        ResizeMode::Box => (|x| if x > -0.5 && x <= 0.5 { 1.0 } else { 0.0 }, 0.5),
+        ResizeMode::Bilinear => (|x| (1.0 - x.abs()).max(0.0), 1.0),
+        ResizeMode::CatmullRom => (|x| cubic_bc(x, 0.0, 0.5), 2.0),
+        ResizeMode::Mitchell => (|x| cubic_bc(x, 1.0 / 3.0, 1.0 / 3.0), 2.0),
+        _ => (lanczos3, 3.0),
+    };
+    let nc = img.nc;
+    let mut out = Img::new(w, h, nc);
+    if w == 0 || h == 0 || img.w == 0 || img.h == 0 {
+        return out;
+    }
+    let alpha = if nc == 2 || nc == 4 { Some(nc - 1) } else { None };
+    // Source as floats, premultiplied by alpha.
+    let mut src: Vec<f32> = img.data.iter().map(|&v| v as f32).collect();
+    if let Some(a) = alpha {
+        for p in src.chunks_exact_mut(nc) {
+            let k = p[a] / 255.0;
+            for (c, v) in p.iter_mut().enumerate() {
+                if c != a {
+                    *v *= k;
+                }
+            }
+        }
+    }
+    let hx = weights(img.w, w, filter, support);
+    let hy = weights(img.h, h, filter, support);
+    // Horizontal pass: img.h rows of w pixels.
+    let mut tmp = vec![0f32; w * img.h * nc];
+    for y in 0..img.h {
+        let row = &src[y * img.w * nc..(y + 1) * img.w * nc];
+        let o = &mut tmp[y * w * nc..(y + 1) * w * nc];
+        for (x, (start, ws)) in hx.iter().enumerate() {
+            for (i, &wt) in ws.iter().enumerate() {
+                let s = (start + i) * nc;
+                for c in 0..nc {
+                    o[x * nc + c] += row[s + c] * wt;
+                }
+            }
+        }
+    }
+    // Vertical pass, then un-premultiply and round.
+    let stride = w * nc;
+    let mut acc = vec![0f32; stride];
+    for (y, (start, ws)) in hy.iter().enumerate() {
+        acc.fill(0.0);
+        for (i, &wt) in ws.iter().enumerate() {
+            let r = &tmp[(start + i) * stride..(start + i + 1) * stride];
+            for (a, &v) in acc.iter_mut().zip(r) {
+                *a += v * wt;
+            }
+        }
+        let o = &mut out.data[y * stride..(y + 1) * stride];
+        for (p, q) in o.chunks_exact_mut(nc).zip(acc.chunks_exact(nc)) {
+            let k = alpha.map(|a| q[a].clamp(0.0, 255.0) / 255.0);
+            for c in 0..nc {
+                let mut v = q[c];
+                if let (Some(a), Some(k)) = (alpha, k)
+                    && c != a
+                {
+                    v = if k > 0.0 { v / k } else { 0.0 };
+                }
+                p[c] = (v + 0.5).clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    out
+}
+
+/// Per output index: the first source index and the normalised weights.
+#[cfg(target_arch = "wasm32")]
+fn weights(src: usize, dst: usize, filter: fn(f64) -> f64, support: f64) -> Vec<(usize, Vec<f32>)> {
+    let scale = src as f64 / dst as f64;
+    let fscale = scale.max(1.0);
+    let support = support * fscale;
+    (0..dst)
+        .map(|x| {
+            let center = (x as f64 + 0.5) * scale;
+            let lo = ((center - support + 0.5).floor().max(0.0)) as usize;
+            let hi = ((center + support + 0.5).floor() as usize).min(src).max(lo + 1);
+            let mut ws: Vec<f64> = (lo..hi)
+                .map(|i| filter((i as f64 - center + 0.5) / fscale))
+                .collect();
+            let sum: f64 = ws.iter().sum();
+            if sum != 0.0 {
+                ws.iter_mut().for_each(|v| *v /= sum);
+            }
+            (lo, ws.into_iter().map(|v| v as f32).collect())
+        })
+        .collect()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn cubic_bc(x: f64, b: f64, c: f64) -> f64 {
+    let x = x.abs();
+    if x < 1.0 {
+        ((12.0 - 9.0 * b - 6.0 * c) * x * x * x + (-18.0 + 12.0 * b + 6.0 * c) * x * x + (6.0 - 2.0 * b)) / 6.0
+    } else if x < 2.0 {
+        ((-b - 6.0 * c) * x * x * x + (6.0 * b + 30.0 * c) * x * x + (-12.0 * b - 48.0 * c) * x + (8.0 * b + 24.0 * c))
+            / 6.0
+    } else {
+        0.0
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn lanczos3(x: f64) -> f64 {
+    let sinc = |v: f64| {
+        if v == 0.0 {
+            1.0
+        } else {
+            let p = std::f64::consts::PI * v;
+            p.sin() / p
+        }
+    };
+    if x.abs() < 3.0 { sinc(x) * sinc(x / 3.0) } else { 0.0 }
 }
 
 // ---------------------------------------------------------------------------
