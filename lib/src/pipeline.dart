@@ -8,7 +8,9 @@ import 'package:image/image.dart' as img;
 
 import 'encoder.dart';
 import 'native_ops.dart';
-import 'native_stub.dart' if (dart.library.ffi) 'native_ffi.dart';
+import 'native_stub.dart'
+    if (dart.library.ffi) 'native_ffi.dart'
+    if (dart.library.js_interop) 'native_web.dart';
 import 'ops.dart';
 
 /// A chain of image operations that keeps the pixels in native memory, so

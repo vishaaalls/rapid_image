@@ -19,3 +19,7 @@ Uint8List encodeIdat(Uint8List src,
         required bool parallel,
         int chunkSize = 1 << 20}) =>
     throw UnsupportedError('rapid_image: no native encoder on this platform');
+
+/// Prepares rapid_image. Needed only on the web (it compiles the
+/// WebAssembly modules); on native platforms it returns at once.
+Future<void> ensureRapidImageInitialized() async {}

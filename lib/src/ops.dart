@@ -7,7 +7,9 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 
 import 'native_ops.dart';
-import 'native_stub.dart' if (dart.library.ffi) 'native_ffi.dart';
+import 'native_stub.dart'
+    if (dart.library.ffi) 'native_ffi.dart'
+    if (dart.library.js_interop) 'native_web.dart';
 
 /// Resampling filters for [copyResize]'s `filter` argument and
 /// `RapidPipeline.resize`. These go beyond package:image's

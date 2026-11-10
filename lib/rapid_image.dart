@@ -15,8 +15,7 @@
 /// [RapidPipeline] chains decode, resize, adjust and encode while keeping the
 /// pixels in native memory, which is fastest.
 ///
-/// On web, await [ensureRapidArchiveInitialized] once at startup before
-/// encoding.
+/// On web, await [ensureRapidImageInitialized] once at startup.
 library;
 
 import 'dart:typed_data';
@@ -50,6 +49,10 @@ export 'package:image/image.dart'
         adjustColor;
 export 'package:rapid_archive/rapid_archive.dart'
     show ensureRapidArchiveInitialized;
+export 'src/native_stub.dart'
+    if (dart.library.ffi) 'src/native_ffi.dart'
+    if (dart.library.js_interop) 'src/native_web.dart'
+    show ensureRapidImageInitialized;
 
 export 'src/encoder.dart';
 export 'src/ops.dart'

@@ -327,3 +327,7 @@ class _FfiOps implements NativeOps {
           amount) ==
       0;
 }
+
+/// Prepares rapid_image. Needed only on the web (it compiles the
+/// WebAssembly modules); on native platforms it returns at once.
+Future<void> ensureRapidImageInitialized() async {}

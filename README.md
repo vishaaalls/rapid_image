@@ -36,7 +36,8 @@ PNG bytes you already have without touching the pixels.
 shrinking: `ResizeFilter.lanczos3` (sharpest, the usual choice for photos),
 `mitchell`, `catmullRom`, `bilinear` or `box`.
 
-On web, `await ensureRapidArchiveInitialized()` once at startup.
+On web, `await ensureRapidImageInitialized()` once at startup (it compiles
+the WebAssembly modules; without it the first call compiles synchronously).
 
 ### Pipeline
 
@@ -53,12 +54,12 @@ final jpg = RapidPipeline.decode(phoneJpeg)  // EXIF orientation applied
 
 Steps: `resize`, `crop`, `rotate`, `flip`, `adjust`, `blur`, then
 `encodeJpg`, `encodePng` or `toImage`. Call `dispose()` when you're done, or
-let the finalizer free the memory.
+let the finalizer free the memory. It works the same way on the web.
 
 ## How it stays compatible
 
 Every function falls back to package:image for anything the native code
-doesn't cover, so results are always available: the web, palette images,
+doesn't cover, so results are always available: palette images,
 16-bit and float images, animations, masks, `blacks`/`whites`/`mids` in
 `adjustColor`, letterboxing in `copyResize`, and JPEGs that aren't 8-bit
 Huffman-coded.
@@ -114,19 +115,41 @@ images in `bench/images/`.
 
 ### Web
 
-There is no native code in the browser. PNG encoding filters with
-package:image's code and compresses with rapid_archive's WebAssembly
-(2000x1500 image, level 6):
+In the browser the image operations run as WebAssembly: the same Rust code,
+built for wasm32 with SIMD (350 KB, 142 KB gzipped, embedded in the
+package), on one thread. The results are the same as natively: the
+comparison tests run in Chrome under dart2js and dart2wasm too. Two
+differences: high-quality `ResizeFilter` resampling uses a small built-in
+resampler instead of fast_image_resize (close, not identical to native), and
+PNG encoding uses rapid_archive's WebAssembly compressor.
+
+Chrome on an Apple M4, 2000x1500 RGB image
+(`dart test -p chrome [-c dart2wasm] bench/web_ops_bench_test.dart`):
+
+| Operation | image (dart2js) | rapid_image (dart2js) | image (dart2wasm) | rapid_image (dart2wasm) |
+| --- | --- | --- | --- | --- |
+| `decodeJpg` | 252 ms | 34 ms (7.4x) | 299 ms | 52 ms (5.7x) |
+| `decodePng` | 395 ms | 34 ms (11.7x) | 125 ms | 76 ms (1.7x) |
+| `encodeJpg` q85 | 94 ms | 30 ms (3.1x) | 275 ms | 60 ms (4.6x) |
+| `copyResize` to 1/4, cubic | 21 ms | 7 ms (3.0x) | 87 ms | 37 ms (2.4x) |
+| `copyRotate` 15°, linear | 688 ms | 30 ms (22.8x) | 767 ms | 101 ms (7.6x) |
+| `gaussianBlur` radius 5 | 273 ms | 58 ms (4.7x) | 997 ms | 115 ms (8.6x) |
+| `adjustColor` contrast + saturation | 592 ms | 51 ms (11.7x) | 988 ms | 104 ms (9.5x) |
+| Upload flow, `RapidPipeline` | 568 ms | 105 ms (5.4x) | 1085 ms | 88 ms (12.3x) |
+
+Under dart2wasm, copying pixels between Dart and WebAssembly memory costs
+about 3 ms per MB each way (dart2js: almost nothing), so the drop-ins gain
+less there than `RapidPipeline`, which copies once in and once out.
+
+PNG encoding (2000x1500, level 6):
 
 | Build | image | rapid_image | Speedup |
 | --- | --- | --- | --- |
 | JavaScript (dart2js) | 1594 ms | 475 ms | 3.4x |
 | WebAssembly (dart2wasm) | 2404 ms | 878 ms | 2.7x |
 
-The other functions, and `RapidPipeline`, use package:image on the web, so
-they work there with package:image's speed. The WebAssembly number needs
-rapid_archive 0.2.1 or later. Run `dart test -p chrome bench/web_bench_test.dart`
-to measure in a browser.
+The PNG WebAssembly number needs rapid_archive 0.2.1 or later. Run
+`dart test -p chrome bench/web_bench_test.dart` to measure it.
 
 ## Native library
 

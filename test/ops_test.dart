@@ -1,4 +1,4 @@
-@TestOn('vm')
+// Runs natively and in browsers (WebAssembly), checking the same results.
 library;
 
 import 'dart:math';
@@ -55,7 +55,7 @@ img.ExifData exifWith({int? orientation, String? make}) {
 }
 
 void main() {
-  setUpAll(rapid.ensureRapidArchiveInitialized);
+  setUpAll(rapid.ensureRapidImageInitialized);
 
   group('decodePng', () {
     for (final nc in [1, 2, 3, 4]) {

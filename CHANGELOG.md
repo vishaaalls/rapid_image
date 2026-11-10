@@ -12,7 +12,11 @@
     resampling filters (fast_image_resize).
 * `RapidPipeline`: decode, resize, crop, rotate, flip, adjust, blur and
   encode with the pixels kept in native memory, carrying EXIF, ICC and PNG
-  text through. Works on the web with package:image.
+  text through.
+* Web: the same operations as WebAssembly (wasm32 + SIMD, 350 KB embedded),
+  giving the same results; `ensureRapidImageInitialized()` compiles it at
+  startup. Chrome, 2000x1500: JPEG decode 7.4x faster (dart2js), rotate up
+  to 23x, upload flow 5.4x (dart2js) and 12.3x (dart2wasm).
 * Apple M4, 12 MP photo: JPEG decode 6.5x faster, blur 14x, adjustColor up
   to 64x, rotate up to 58x; a decode-resize-adjust-encode upload flow 9.4x
   (bench/RESULTS-macos-m4.txt).
