@@ -101,10 +101,12 @@ void main() {
 
   group('decodeJpg', () {
     // zune-jpeg's IDCT rounding differs slightly from package:image's
-    // (4:4:4: within 4, mean about 0.55 on photos). For 4:2:0 it also
-    // interpolates the half-resolution chroma, as libjpeg and browsers do,
-    // where package:image repeats it, so colour edges differ by up to about
-    // 20 (mean about 1.2).
+    // (4:4:4: within 4, mean about 0.4 on photos). For 4:2:0 it also
+    // interpolates the half-resolution chroma, as libjpeg-turbo and browsers
+    // do, where package:image repeats it. On real photos that gives mean
+    // 0.9 to 1.0 and 99th percentile 6 to 8, but sharp saturated colour edges
+    // differ by up to about 75 (this synthetic image stays under 32). The
+    // libjpeg-turbo comparison is in native_test.dart.
     for (final chroma in img.JpegChroma.values) {
       test('${chroma.name}: close to image', () {
         final jpg = img.encodeJpg(photo(517, 333), quality: 90, chroma: chroma);

@@ -5,9 +5,9 @@ and the slow parts (PNG and JPEG encoding and decoding, resizing, rotating,
 blurring, colour adjustment) run in Rust, in parallel on every core, with
 the same results.
 
-On an Apple M4 with a 12-megapixel photo, PNG encoding is 12x faster, JPEG
-decoding 6.5x, blur 14x, colour adjustment up to 64x, and a typical "shrink
-a phone photo for upload" flow goes from 483 ms to 51 ms.
+On an Apple M4 with a 12-megapixel photo, PNG encoding is 13x faster, JPEG
+decoding 5.4x, blur 14x, colour adjustment up to 68x, and a typical "shrink
+a phone photo for upload" flow goes from 476 ms to 61 ms.
 
 ## Use
 
@@ -73,7 +73,7 @@ Where the native code runs:
 | `decodePng` (8-bit grey, grey+alpha, RGB, RGBA) | Identical pixels, ICC profile and text |
 | `encodePng` | Identical pixels; every chunk except IDAT identical byte for byte |
 | `decodeJpg` 4:4:4 | Within 4 per channel (mean 0.55): IDCT rounding |
-| `decodeJpg` 4:2:0 | Within about 20 at colour edges (mean 1.2): chroma is interpolated, as libjpeg and browsers do, where package:image repeats it |
+| `decodeJpg` 4:2:0 | Matches libjpeg-turbo within 6 (mean 0.3). Compared with package:image: mean 0.9 to 1.0, 99th percentile 6 to 8, up to about 75 at sharp, saturated colour edges (0.03 to 0.13% of pixels differ by more than 20). The decoders interpolate the half-resolution chroma, as libjpeg-turbo and browsers do; package:image repeats it |
 | `encodeJpg` | Different encoder (jpeg-encoder), same quality scale, sizes within a few percent; EXIF and ICC written as package:image writes them; RGBA blended onto the background colour the same way |
 
 The "identical" functions are ports of package:image's own algorithms that
@@ -88,21 +88,21 @@ Apple M4 (10 cores), 4000x3000 RGB photo, image 4.12.0
 
 | Operation | image | rapid_image | Speedup |
 | --- | --- | --- | --- |
-| `decodeJpg` | 270 ms | 41 ms | 6.5x |
-| `decodePng` | 243 ms | 96 ms | 2.5x |
-| `encodeJpg` quality 85, 4:4:4 | 336 ms | 92 ms | 3.7x |
-| `encodeJpg` quality 85, 4:2:0 | 246 ms | 64 ms | 3.8x |
-| `encodePng` level 6 | 786 ms | 64 ms | 12.3x |
-| `copyResize` to 1/4, cubic | 50 ms | 5 ms | 9.3x |
-| `copyResize` to 1/4, average | 48 ms | 3 ms | 14.4x |
+| `decodeJpg` | 264 ms | 49 ms | 5.4x |
+| `decodePng` | 241 ms | 96 ms | 2.5x |
+| `encodeJpg` quality 85, 4:4:4 | 338 ms | 91 ms | 3.7x |
+| `encodeJpg` quality 85, 4:2:0 | 246 ms | 62 ms | 3.9x |
+| `encodePng` level 6 | 781 ms | 59 ms | 13.1x |
+| `copyResize` to 1/4, cubic | 49 ms | 5 ms | 9.5x |
+| `copyResize` to 1/4, average | 46 ms | 3 ms | 15.5x |
 | `copyResize` to 1/4, Lanczos3 (new) | n/a | 6 ms | |
-| `copyRotate` 90 degrees | 52 ms | 11 ms | 4.9x |
-| `copyRotate` 15 degrees, linear | 1891 ms | 33 ms | 57.8x |
-| `gaussianBlur` radius 5 | 622 ms | 46 ms | 13.6x |
-| `adjustColor` contrast + saturation | 1767 ms | 28 ms | 63.6x |
-| `adjustColor` contrast only | 30 ms | 7 ms | 4.2x |
-| Upload flow, drop-ins | 483 ms | 56 ms | 8.6x |
-| Upload flow, `RapidPipeline` | 483 ms | 51 ms | 9.4x |
+| `copyRotate` 90 degrees | 50 ms | 10 ms | 5.2x |
+| `copyRotate` 15 degrees, linear | 1889 ms | 28 ms | 67.2x |
+| `gaussianBlur` radius 5 | 623 ms | 44 ms | 14.2x |
+| `adjustColor` contrast + saturation | 1768 ms | 26 ms | 67.7x |
+| `adjustColor` contrast only | 30 ms | 7 ms | 4.5x |
+| Upload flow, drop-ins | 476 ms | 65 ms | 7.3x |
+| Upload flow, `RapidPipeline` | 476 ms | 61 ms | 7.9x |
 
 The upload flow decodes a JPEG, resizes it to 1080 wide, adjusts contrast
 and saturation and encodes a JPEG at quality 85.
@@ -116,7 +116,7 @@ images in `bench/images/`.
 ### Web
 
 In the browser the image operations run as WebAssembly: the same Rust code,
-built for wasm32 with SIMD (350 KB, 142 KB gzipped, embedded in the
+built for wasm32 with SIMD (410 KB, 156 KB gzipped, embedded in the
 package), on one thread. The results are the same as natively: the
 comparison tests run in Chrome under dart2js and dart2wasm too. Two
 differences: high-quality `ResizeFilter` resampling uses a small built-in
@@ -128,14 +128,14 @@ Chrome on an Apple M4, 2000x1500 RGB image
 
 | Operation | image (dart2js) | rapid_image (dart2js) | image (dart2wasm) | rapid_image (dart2wasm) |
 | --- | --- | --- | --- | --- |
-| `decodeJpg` | 252 ms | 34 ms (7.4x) | 299 ms | 52 ms (5.7x) |
+| `decodeJpg` | 251 ms | 32 ms (7.9x) | 305 ms | 46 ms (6.6x) |
 | `decodePng` | 395 ms | 34 ms (11.7x) | 125 ms | 76 ms (1.7x) |
 | `encodeJpg` q85 | 94 ms | 30 ms (3.1x) | 275 ms | 60 ms (4.6x) |
 | `copyResize` to 1/4, cubic | 21 ms | 7 ms (3.0x) | 87 ms | 37 ms (2.4x) |
 | `copyRotate` 15°, linear | 688 ms | 30 ms (22.8x) | 767 ms | 101 ms (7.6x) |
 | `gaussianBlur` radius 5 | 273 ms | 58 ms (4.7x) | 997 ms | 115 ms (8.6x) |
 | `adjustColor` contrast + saturation | 592 ms | 51 ms (11.7x) | 988 ms | 104 ms (9.5x) |
-| Upload flow, `RapidPipeline` | 568 ms | 105 ms (5.4x) | 1085 ms | 88 ms (12.3x) |
+| Upload flow, `RapidPipeline` | 558 ms | 101 ms (5.5x) | 1074 ms | 85 ms (12.7x) |
 
 Under dart2wasm, copying pixels between Dart and WebAssembly memory costs
 about 3 ms per MB each way (dart2js: almost nothing), so the drop-ins gain

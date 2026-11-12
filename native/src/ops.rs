@@ -987,7 +987,10 @@ pub fn decode_jpeg(data: &[u8], orientation: i32) -> Result<Img, String> {
         .jpeg_set_out_colorspace(ColorSpace::RGB)
         .set_max_width(1 << 16)
         .set_max_height(1 << 16);
-    let mut d = zune_jpeg::JpegDecoder::new_with_options(data, opts);
+    let mut d = zune_jpeg::JpegDecoder::new_with_options(
+        zune_jpeg::zune_core::bytestream::ZCursor::new(data),
+        opts,
+    );
     let px = d.decode().map_err(|e| format!("{e:?}"))?;
     let (w, h) = d.dimensions().ok_or("no dimensions")?;
     if px.len() != w * h * 3 {

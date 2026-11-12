@@ -1,6 +1,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart' show ZLibDecoder;
@@ -113,5 +114,48 @@ void main() {
     final theirs = img.encodePng(anim, singleFrame: true);
     expectSamePixels(img.decodePng(theirs)!, img.decodePng(ours)!);
     expect(chunks(ours).map((c) => c.$1), isNot(contains('acTL')));
+  });
+
+  group('decodeJpg 4:2:0 against libjpeg-turbo', () {
+    // test/fixtures/edges_420.jpg: 320x240, saturated colour shapes with hard
+    // edges, 4:2:0, quality 90 (made with Pillow). The PNG next to it is
+    // libjpeg-turbo 3.1.1's decode of it (via Pillow: fancy upsampling,
+    // islow IDCT), the reference for "interpolated chroma".
+    final jpg = File('test/fixtures/edges_420.jpg').readAsBytesSync();
+    final turbo = img.decodePng(
+        File('test/fixtures/edges_420_libjpeg_turbo.png').readAsBytesSync())!;
+
+    (int, double) diffRange(img.Image a, img.Image b, int x0, int x1) {
+      var mx = 0, sum = 0, n = 0;
+      for (var y = 0; y < a.height; y++) {
+        for (var x = x0; x < x1; x++) {
+          final p = a.getPixel(x, y), q = b.getPixel(x, y);
+          for (var c = 0; c < 3; c++) {
+            final d = (p[c] - q[c]).abs().toInt();
+            sum += d;
+            n++;
+            if (d > mx) mx = d;
+          }
+        }
+      }
+      return (mx, sum / n);
+    }
+
+    test('matches libjpeg-turbo within IDCT rounding', () {
+      final ours = rapid.decodeJpg(jpg)!;
+      final (mx, mean) = diffRange(ours, turbo, 0, ours.width);
+      expect(mx, lessThanOrEqualTo(6), reason: 'max $mx mean $mean');
+      expect(mean, lessThan(0.5), reason: 'max $mx mean $mean');
+    });
+
+    test('second-to-last column is interpolated correctly', () {
+      // zune-jpeg 0.4 weighted the wrong neighbour for output column
+      // 2n-2 when upsampling chroma horizontally (up to 110 off here);
+      // fixed in 0.5.
+      final ours = rapid.decodeJpg(jpg)!;
+      final w = ours.width;
+      final (mx, _) = diffRange(ours, turbo, w - 2, w);
+      expect(mx, lessThanOrEqualTo(6));
+    });
   });
 }
