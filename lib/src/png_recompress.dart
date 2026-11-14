@@ -10,6 +10,13 @@ import 'package:rapid_archive/rapid_archive.dart' as ra;
 /// of fdAT chunks can change, the sequence numbers of fcTL and fdAT chunks are
 /// renumbered. The pixels are untouched: decoding the result gives the same
 /// image as decoding [png].
+///
+/// The result is never larger than [png]: if recompressing doesn't make it
+/// smaller, [png] itself is returned. (A higher level isn't always smaller:
+/// on grainy photos, level 1 data can beat level 6 or 9.) [parallel] is
+/// several times faster; its output is within a few percent of single-core
+/// output in either direction, so for the smallest file at any cost, try
+/// both.
 Uint8List recompressPng(Uint8List png, {int level = 6, bool parallel = true}) {
   if (png.length < 8 || !_hasSignature(png)) {
     throw const FormatException('Not a PNG file');
@@ -77,7 +84,8 @@ Uint8List recompressPng(Uint8List png, {int level = 6, bool parallel = true}) {
     if (type == 'IEND') break;
   }
   flush();
-  return out.takeBytes();
+  final result = out.takeBytes();
+  return result.length < png.length ? result : png;
 }
 
 const _maxChunk = 1 << 20;

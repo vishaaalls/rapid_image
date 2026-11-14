@@ -13,8 +13,10 @@ import 'png_recompress.dart';
 /// 1 to 4-bit, APNG, HDR, the web) uses image's own encoder to filter, then
 /// recompresses its data with rapid_archive.
 class RapidPngEncoder extends img.PngEncoder {
-  /// Whether to compress on every core, at levels 3 and up. The output is a
-  /// little larger (about 1%) than with [parallel] off.
+  /// Whether to compress on every core, at levels 3 and up: about 2.5 to 7
+  /// times faster. Sizes differ a little from [parallel] off, either way:
+  /// within 1% on photos, 4% smaller on a UI screenshot and up to 3% larger
+  /// on grainy images (Apple M4, bench/images).
   final bool parallel;
 
   RapidPngEncoder(

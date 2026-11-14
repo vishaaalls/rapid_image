@@ -30,7 +30,8 @@ arguments: `encodePng`, `decodePng`, `decodeJpg`, `encodeJpg`,
 `decodeImage`, `copyResize`, `copyRotate`, `gaussianBlur` and
 `adjustColor`, plus the `...File` and named-image variants. `RapidPngEncoder`
 and `RapidJpegEncoder` are drop-in `Encoder`s. `recompressPng(bytes)` shrinks
-PNG bytes you already have without touching the pixels.
+PNG bytes you already have without touching the pixels, and never returns a
+larger file (if recompressing doesn't help, you get the input back).
 
 `copyResize` also takes a `filter`, for resampling that stays smooth when
 shrinking: `ResizeFilter.lanczos3` (sharpest, the usual choice for photos),

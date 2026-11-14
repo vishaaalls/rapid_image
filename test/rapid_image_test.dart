@@ -160,6 +160,27 @@ void main() {
   test('rejects non-PNG input', () {
     expect(() => rapid.recompressPng(Uint8List(20)), throwsFormatException);
   });
+
+  test('recompressPng never returns a larger file', () {
+    // Grain: level 1 data often beats level 9 here.
+    final im = noisy(400, 300);
+    final small = rapid.encodePng(im, level: 9, parallel: false);
+    final again = rapid.recompressPng(small, level: 1);
+    expect(again.length, lessThanOrEqualTo(small.length));
+    final l1 = rapid.encodePng(im, level: 1, parallel: false);
+    for (final parallel in [true, false]) {
+      for (var level = 0; level <= 9; level++) {
+        final r = rapid.recompressPng(l1, level: level, parallel: parallel);
+        expect(r.length, lessThanOrEqualTo(l1.length),
+            reason: 'level $level parallel $parallel');
+        expectSamePixels(img.decodePng(l1)!, img.decodePng(r)!);
+      }
+    }
+    // When it can't shrink (same settings as the input), the input itself
+    // comes back.
+    final best = rapid.recompressPng(l1, level: 9, parallel: false);
+    expect(rapid.recompressPng(best, level: 9, parallel: false), same(best));
+  });
 }
 
 Iterable<(String, Uint8List, int)> _chunks(Uint8List png) sync* {

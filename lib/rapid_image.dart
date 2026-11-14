@@ -72,8 +72,8 @@ export 'src/png_recompress.dart';
 
 /// Encodes [image] to PNG, like image's `encodePng`, but faster.
 ///
-/// [parallel] compresses on every core; turn it off for output that is about
-/// 1% smaller.
+/// [parallel] compresses on every core, several times faster; sizes stay
+/// within a few percent of single-core output, in either direction.
 Uint8List encodePng(Image image,
         {bool singleFrame = false,
         int level = 6,

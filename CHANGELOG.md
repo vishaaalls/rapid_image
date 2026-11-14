@@ -12,6 +12,11 @@
     from package:image's algorithms and run in parallel: identical pixels.
   * `copyResize(filter: ResizeFilter.lanczos3)` and other high-quality
     resampling filters (fast_image_resize).
+* `recompressPng` never returns a larger file than its input: higher levels
+  aren't always smaller (grainy photos), so the input is returned when
+  recompressing doesn't help. The `parallel` docs give measured sizes
+  instead of "about 1%": within 1% on photos, 4% smaller on a UI
+  screenshot, up to 3% larger on grainy images.
 * JPEG ICC profiles use the standard APP2 layout (sequence number and
   count, split over several segments when large), read and written as
   package:image 4.13 does; profiles written by older package:image are still
