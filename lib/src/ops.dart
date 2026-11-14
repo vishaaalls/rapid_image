@@ -125,10 +125,18 @@ _JpegHeader? _jpegHeader(Uint8List b) {
   return null;
 }
 
-/// The ICC profile as package:image's JPEG decoder reads it: the body of the
-/// last APP2 "ICC_PROFILE" segment, after the 12-byte signature.
+const _iccSignature = [73, 67, 67, 95, 80, 82, 79, 70, 73, 76, 69, 0];
+
+/// The ICC profile as package:image (4.13 and later) and libjpeg read it:
+/// APP2 "ICC_PROFILE" segments, each with a 1-based sequence number and the
+/// number of segments, joined in order. A count that differs between
+/// segments, a repeated or out-of-range sequence number, or a missing part
+/// gives no profile. Segments written by package:image before 4.13 (the
+/// profile directly after the signature, with no numbers) are read too.
 img.IccProfile? _jpegIcc(Uint8List b) {
-  img.IccProfile? icc;
+  final parts = <int, Uint8List>{};
+  var count = 0;
+  var valid = true;
   var i = 2;
   while (i + 4 <= b.length && b[i] == 0xFF) {
     final m = b[i + 1];
@@ -140,23 +148,41 @@ img.IccProfile? _jpegIcc(Uint8List b) {
     final len = (b[i + 2] << 8) | b[i + 3];
     final end = i + 2 + len;
     if (end > b.length) break;
-    const sig = [73, 67, 67, 95, 80, 82, 79, 70, 73, 76, 69, 0];
-    if (m == 0xE2 && len >= 14) {
+    if (m == 0xE2 && len >= 16) {
       var ok = true;
       for (var k = 0; k < 12; k++) {
-        if (b[i + 4 + k] != sig[k]) {
+        if (b[i + 4 + k] != _iccSignature[k]) {
           ok = false;
           break;
         }
       }
       if (ok) {
-        icc = img.IccProfile('ICC_PROFILE', img.IccProfileCompression.none,
-            Uint8List.fromList(b.sublist(i + 16, end)));
+        final data = Uint8List.sublistView(b, i + 16, end);
+        // Unsplit (pre-4.13 package:image): the profile starts with its own
+        // big-endian size, so the would-be sequence number is 0.
+        final unsplit = data.length >= 4 &&
+            data[0] == 0 &&
+            ByteData.sublistView(data).getUint32(0) == data.length;
+        final seq = unsplit ? 1 : data[0];
+        final n = unsplit ? 1 : (data.length >= 2 ? data[1] : 0);
+        final part = unsplit ? data : Uint8List.sublistView(data, 2);
+        if (count == 0) count = n;
+        if (seq == 0 || seq > n || n != count || parts.containsKey(seq)) {
+          valid = false;
+        } else {
+          parts[seq] = part;
+        }
       }
     }
     i = end;
   }
-  return icc;
+  if (!valid || parts.isEmpty || parts.length != count) return null;
+  final out = BytesBuilder(copy: false);
+  for (var k = 1; k <= count; k++) {
+    out.add(parts[k]!);
+  }
+  return img.IccProfile(
+      'ICC_PROFILE', img.IccProfileCompression.none, out.takeBytes());
 }
 
 /// The result of a native JPEG decode: pixels with the EXIF orientation
@@ -201,26 +227,82 @@ img.Image? decodeJpg(Uint8List bytes, {int? maxPixels, int scale = 1}) {
   return img.decodeJpg(bytes, maxPixels: maxPixels, scale: scale);
 }
 
-/// The APP1 (EXIF) and APP2 (ICC) segment bodies package:image's JPEG
-/// encoder writes for [image].
-(Uint8List?, Uint8List?) jpegSegments(img.ExifData exif, img.IccProfile? icc) {
-  Uint8List? app1;
-  if (!exif.isEmpty) {
-    final o = img.OutputBuffer();
-    exif.write(o);
-    final b = o.getBytes();
-    app1 = Uint8List(6 + b.length)
-      ..setAll(0, const [0x45, 0x78, 0x69, 0x66, 0, 0])
-      ..setAll(6, b);
+/// The APP1 (EXIF) segment body package:image's JPEG encoder writes.
+Uint8List? _exifSegment(img.ExifData exif) {
+  if (exif.isEmpty) return null;
+  final o = img.OutputBuffer();
+  exif.write(o);
+  final b = o.getBytes();
+  return Uint8List(6 + b.length)
+    ..setAll(0, const [0x45, 0x78, 0x69, 0x66, 0, 0])
+    ..setAll(6, b);
+}
+
+// An APP2 segment holds 65535 bytes, less the length (2), the signature (12),
+// the sequence number and the count (2).
+const _maxIccPart = 65535 - 16;
+
+/// The APP2 segment bodies for [icc], in the standard (ICC.1, libjpeg)
+/// layout package:image 4.13 writes: signature, sequence number, count, part.
+List<Uint8List> _iccSegments(img.IccProfile? icc) {
+  if (icc == null) return const [];
+  final d = icc.decompressed();
+  final n = (d.length + _maxIccPart - 1) ~/ _maxIccPart;
+  if (n > 255) throw img.ImageException('ICC profile is too large for a JPEG');
+  return [
+    for (var k = 0; k < n; k++)
+      () {
+        final start = k * _maxIccPart;
+        final end =
+            start + _maxIccPart < d.length ? start + _maxIccPart : d.length;
+        return Uint8List(14 + end - start)
+          ..setAll(0, _iccSignature)
+          ..[12] = k + 1
+          ..[13] = n
+          ..setRange(14, 14 + end - start, d, start);
+      }()
+  ];
+}
+
+/// Inserts APP2 [segments] after the APPn segments at the start of [jpg].
+Uint8List _insertApp2(Uint8List jpg, List<Uint8List> segments) {
+  var at = 2;
+  while (at + 4 <= jpg.length &&
+      jpg[at] == 0xFF &&
+      jpg[at + 1] >= 0xE0 &&
+      jpg[at + 1] <= 0xEF) {
+    at += 2 + ((jpg[at + 2] << 8) | jpg[at + 3]);
   }
-  Uint8List? app2;
-  if (icc != null) {
-    final d = icc.decompressed();
-    app2 = Uint8List(12 + d.length)
-      ..setAll(0, const [73, 67, 67, 95, 80, 82, 79, 70, 73, 76, 69, 0])
-      ..setAll(12, d);
+  final out = BytesBuilder(copy: false)..add(Uint8List.sublistView(jpg, 0, at));
+  for (final s in segments) {
+    final len = s.length + 2;
+    out
+      ..add([0xFF, 0xE2, len >> 8, len & 0xFF])
+      ..add(s);
   }
-  return (app1, app2);
+  out.add(Uint8List.sublistView(jpg, at));
+  return out.takeBytes();
+}
+
+/// Encodes [n] to JPEG natively with package:image's EXIF and ICC segments.
+/// Returns null if the native encoder can't (the caller falls back).
+Uint8List? encodeJpegWithMeta(NativeImage n,
+    {required int quality,
+    required bool chroma420,
+    required List<int> background,
+    required img.ExifData exif,
+    img.IccProfile? icc}) {
+  final icc2 = _iccSegments(icc);
+  // A profile that fits in one segment goes through the encoder; a larger
+  // one is spliced in after it.
+  final out = nativeOps!.encodeJpeg(n,
+      quality: quality,
+      chroma420: chroma420,
+      background: background,
+      app1: _exifSegment(exif),
+      app2: icc2.length == 1 ? icc2.first : null);
+  if (out == null || icc2.length <= 1) return out;
+  return _insertApp2(out, icc2);
 }
 
 List<int> _background(img.Color? c) => c == null
@@ -252,15 +334,14 @@ class RapidJpegEncoder extends img.JpegEncoder {
         image.numChannels >= 3 &&
         image.width <= 65535 &&
         image.height <= 65535) {
-      final (app1, app2) = jpegSegments(image.exif, image.iccProfile);
       final n = toNative(image);
       try {
-        final out = ops.encodeJpeg(n,
+        final out = encodeJpegWithMeta(n,
             quality: _quality,
             chroma420: chroma == img.JpegChroma.yuv420,
             background: _background(image.backgroundColor),
-            app1: app1,
-            app2: app2);
+            exif: image.exif,
+            icc: image.iccProfile);
         if (out != null) return out;
       } finally {
         n.dispose();

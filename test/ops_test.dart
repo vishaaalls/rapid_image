@@ -147,6 +147,77 @@ void main() {
           img.decodeJpg(jpg)!.iccProfile!.data);
     });
 
+    // A profile-like blob: starts with its big-endian size, as real ICC
+    // profiles do.
+    Uint8List profile(int size) {
+      final d = Uint8List.fromList(List.generate(size, (i) => (i * 7) & 0xff));
+      ByteData.sublistView(d).setUint32(0, size);
+      return d;
+    }
+
+    img.Image withIcc(Uint8List d) => photo(40, 24)
+      ..iccProfile =
+          img.IccProfile('ICC_PROFILE', img.IccProfileCompression.none, d);
+
+    test('a profile split over several APP2 segments is joined', () {
+      // 150 000 bytes needs 3 segments.
+      final d = profile(150000);
+      final theirs = img.encodeJpg(withIcc(d));
+      expect(rapid.decodeJpg(theirs)!.iccProfile!.data, d);
+      final ours = rapid.encodeJpg(withIcc(d));
+      expect(img.decodeJpg(ours)!.iccProfile!.data, d);
+      expect(rapid.decodeJpg(ours)!.iccProfile!.data, d);
+      // Through the pipeline too.
+      final piped = rapid.RapidPipeline.decode(theirs).encodeJpg();
+      expect(img.decodeJpg(piped)!.iccProfile!.data, d);
+    });
+
+    test('segments are written in the standard layout', () {
+      final ours = rapid.encodeJpg(withIcc(profile(1000)));
+      // SOI, then APPn segments; find the APP2 one.
+      var i = 2;
+      while (ours[i + 1] != 0xE2) {
+        i += 2 + ((ours[i + 2] << 8) | ours[i + 3]);
+      }
+      expect(String.fromCharCodes(ours.sublist(i + 4, i + 15)), 'ICC_PROFILE');
+      expect(ours.sublist(i + 15, i + 18), [0, 1, 1]); // NUL, part 1 of 1
+    });
+
+    test('profiles written by package:image before 4.13 are read', () {
+      // Old layout: the profile right after the signature, no numbers.
+      final d = profile(600);
+      final plain = img.encodeJpg(photo(16, 16));
+      final seg = [...'ICC_PROFILE'.codeUnits, 0, ...d];
+      final old = Uint8List.fromList([
+        ...plain.sublist(0, 2),
+        0xFF,
+        0xE2,
+        (seg.length + 2) >> 8,
+        (seg.length + 2) & 0xFF,
+        ...seg,
+        ...plain.sublist(2),
+      ]);
+      expect(rapid.decodeJpg(old)!.iccProfile!.data, d);
+      expect(img.decodeJpg(old)!.iccProfile!.data, d);
+    });
+
+    test('an inconsistent set of ICC segments gives no profile', () {
+      final plain = img.encodeJpg(photo(16, 16));
+      List<int> seg(int seq, int count) {
+        final body = [...'ICC_PROFILE'.codeUnits, 0, seq, count, 1, 2, 3];
+        return [0xFF, 0xE2, 0, body.length + 2, ...body];
+      }
+
+      final bad = Uint8List.fromList([
+        ...plain.sublist(0, 2),
+        ...seg(1, 2),
+        ...seg(1, 2),
+        ...plain.sublist(2)
+      ]);
+      expect(rapid.decodeJpg(bad)!.iccProfile, isNull);
+      expect(img.decodeJpg(bad)!.iccProfile, isNull);
+    });
+
     test('scale and garbage fall back to image', () {
       final jpg = img.encodeJpg(photo(80, 64));
       expect(rapid.decodeJpg(jpg, scale: 2)!.width,

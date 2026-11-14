@@ -12,6 +12,10 @@
     from package:image's algorithms and run in parallel: identical pixels.
   * `copyResize(filter: ResizeFilter.lanczos3)` and other high-quality
     resampling filters (fast_image_resize).
+* JPEG ICC profiles use the standard APP2 layout (sequence number and
+  count, split over several segments when large), read and written as
+  package:image 4.13 does; profiles written by older package:image are still
+  read. Requires image 4.13.0 or later.
 * `RapidPipeline`: decode, resize, crop, rotate, flip, adjust, blur and
   encode with the pixels kept in native memory, carrying EXIF, ICC and PNG
   text through.

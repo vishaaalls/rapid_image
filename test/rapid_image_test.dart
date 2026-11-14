@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart' as archive show ZLibDecoder;
 import 'package:archive/archive.dart' show getCrc32;
 import 'package:image/image.dart' as img;
 import 'package:rapid_image/rapid_image.dart' as rapid;
@@ -33,9 +34,33 @@ void expectSamePixels(img.Image a, img.Image b) {
 void checkRoundTrip(img.Image im, {bool parallel = true, int level = 6}) {
   final ours = rapid.encodePng(im, parallel: parallel, level: level);
   final theirs = img.encodePng(im, level: level);
-  final a = img.decodePng(theirs)!;
-  final b = img.decodePng(ours)!;
-  expectSamePixels(a, b);
+  // package:image 4.13 under dart2js can't read its own level-0 (stored)
+  // PNGs (its new zlib checksum check fails there); its level-6 output has
+  // the same pixels.
+  final a = img.decodePng(theirs) ?? img.decodePng(img.encodePng(im))!;
+  var b = img.decodePng(ours);
+  if (b == null && level == 0 && img.decodePng(theirs) == null) {
+    // The same package:image bug reading stored data. Check our zlib stream
+    // (including its Adler-32) with package:archive instead, then read the
+    // pixels with package:image's checksum-free path: a re-deflated copy.
+    final raw = archive.ZLibDecoder().decodeBytes(_idat(ours), verify: true);
+    expect(raw, isNotEmpty);
+    b = img.decodePng(rapid.recompressPng(ours, level: 6))!;
+  }
+  expectSamePixels(a, b!);
+}
+
+/// The concatenated IDAT chunk data of [png] (one zlib stream).
+Uint8List _idat(Uint8List png) {
+  final out = BytesBuilder(copy: false);
+  var i = 8;
+  while (i + 8 <= png.length) {
+    final len = ByteData.sublistView(png).getUint32(i);
+    final type = String.fromCharCodes(png.sublist(i + 4, i + 8));
+    if (type == 'IDAT') out.add(Uint8List.sublistView(png, i + 8, i + 8 + len));
+    i += 12 + len;
+  }
+  return out.takeBytes();
 }
 
 void main() {

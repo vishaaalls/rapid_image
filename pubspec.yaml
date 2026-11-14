@@ -14,7 +14,7 @@ dependencies:
   crypto: ^3.0.0
   ffi: ^2.1.0
   hooks: ^2.2.0
-  image: ^4.9.0
+  image: ^4.13.0
   rapid_archive: ^0.2.0
 
 dev_dependencies:

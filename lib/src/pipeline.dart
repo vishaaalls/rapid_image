@@ -215,13 +215,12 @@ class RapidPipeline {
   Uint8List encodeJpg(
       {int quality = 90, img.JpegChroma chroma = img.JpegChroma.yuv444}) {
     if (_isNative && _n.channels >= 3) {
-      final (app1, app2) = jpegSegments(_exif, _icc);
-      final out = nativeOps!.encodeJpeg(_n,
+      final out = encodeJpegWithMeta(_n,
           quality: quality,
           chroma420: chroma == img.JpegChroma.yuv420,
           background: const [255, 255, 255],
-          app1: app1,
-          app2: app2);
+          exif: _exif,
+          icc: _icc);
       if (out != null) return out;
     }
     return _encodeJpg(toImage(), quality, chroma);
