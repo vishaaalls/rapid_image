@@ -2,7 +2,9 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
-import 'native_stub.dart' if (dart.library.ffi) 'native_ffi.dart';
+import 'native_stub.dart'
+    if (dart.library.ffi) 'native_ffi.dart'
+    if (dart.library.js_interop) 'native_web.dart';
 
 /// Encodes a single-frame, non-palette 8 or 16-bit [image] with the native
 /// encoder, or returns null when that path doesn't apply (web, palettes,

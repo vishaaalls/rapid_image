@@ -1,17 +1,32 @@
 [package]
 name = "rapid_image"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
-description = "Rust core for the rapid_image Dart package: PNG row filtering and compression."
+description = "Rust core for the rapid_image Dart package: PNG and JPEG coding, resizing and filters."
 license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
+zune-jpeg = "0.5"
+jpeg-encoder = "0.6"
+png = "0.17"
+
+# Native: rayon for every core, and fast_image_resize's SIMD resampling. The
+# WebAssembly build is single-threaded and leaves both out to stay small
+# (ops.rs has a sequential stand-in and its own resampler).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.rayon]
+version = "1.10"
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.fast_image_resize]
+version = "5"
+features = ["rayon"]
+
+# The PNG encoder (native only): libdeflate is C, which the WebAssembly build
+# leaves out.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
 libdeflate-sys = "1.26"
-rayon = "1.10"
 crc32fast = "1.4"
 
 [profile.release]

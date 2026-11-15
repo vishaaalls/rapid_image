@@ -1,3 +1,37 @@
+## 0.3.0
+
+* Native (Rust) drop-ins for more of package:image, with the same names and
+  arguments, falling back to package:image wherever they don't apply:
+  * `decodeJpg` (zune-jpeg 0.5, EXIF orientation applied as image does;
+    4:2:0 output matches libjpeg-turbo within 6, tested against a
+    libjpeg-turbo reference decode),
+    `encodeJpg` and `RapidJpegEncoder` (jpeg-encoder; 4:4:4 by default like
+    image, `JpegChroma.yuv420` for smaller files), `decodePng`, `decodeImage`
+    and the `...File` variants.
+  * `copyResize`, `copyRotate`, `gaussianBlur` and `adjustColor`, ported
+    from package:image's algorithms and run in parallel: identical pixels.
+  * `copyResize(filter: ResizeFilter.lanczos3)` and other high-quality
+    resampling filters (fast_image_resize).
+* `recompressPng` never returns a larger file than its input: higher levels
+  aren't always smaller (grainy photos), so the input is returned when
+  recompressing doesn't help. The `parallel` docs give measured sizes
+  instead of "about 1%": within 1% on photos, 4% smaller on a UI
+  screenshot, up to 3% larger on grainy images.
+* JPEG ICC profiles use the standard APP2 layout (sequence number and
+  count, split over several segments when large), read and written as
+  package:image 4.13 does; profiles written by older package:image are still
+  read. Requires image 4.13.0 or later.
+* `RapidPipeline`: decode, resize, crop, rotate, flip, adjust, blur and
+  encode with the pixels kept in native memory, carrying EXIF, ICC and PNG
+  text through.
+* Web: the same operations as WebAssembly (wasm32 + SIMD, 410 KB embedded),
+  giving the same results; `ensureRapidImageInitialized()` compiles it at
+  startup. Chrome, 2000x1500: JPEG decode 7.9x faster (dart2js), rotate up
+  to 23x, upload flow 5.5x (dart2js) and 12.7x (dart2wasm).
+* Apple M4, 12 MP photo: JPEG decode 5.4x faster, blur 14x, adjustColor up
+  to 68x, rotate up to 67x; a decode-resize-adjust-encode upload flow 7.9x
+  (bench/RESULTS-macos-m4.txt).
+
 ## 0.2.0
 
 * PNG rows are now filtered and compressed in Rust, in parallel bands, for
