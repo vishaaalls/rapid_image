@@ -12,6 +12,8 @@
     from package:image's algorithms and run in parallel: identical pixels.
   * `copyResize(filter: ResizeFilter.lanczos3)` and other high-quality
     resampling filters (fast_image_resize).
+* Requires rapid_archive 0.2.2, whose results survive `Isolate.run` and
+  `compute` (rapid_image's PNG encoding builds on it).
 * `recompressPng` never returns a larger file than its input: higher levels
   aren't always smaller (grainy photos), so the input is returned when
   recompressing doesn't help. The `parallel` docs give measured sizes
