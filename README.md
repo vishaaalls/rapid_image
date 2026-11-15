@@ -114,6 +114,38 @@ photo, 6.0x on 1282x1110 and 7.7x on a 1440x3120 screenshot. Run
 images, after `dart run tool/make_bench_images.dart` to build the test
 images in `bench/images/`.
 
+### Real devices
+
+#### iPhone 16 Pro
+
+iPhone 16 Pro (iOS 27.0.1, 6 cores), Flutter release build of the
+rapid_lab benchmark app, 4000x3000 photo, image 4.12.0 (raw output in
+`bench/RESULTS-iphone16pro.txt`):
+
+| Operation | image | rapid_image | Speedup |
+| --- | --- | --- | --- |
+| `decodeJpg` | 527 ms | 47 ms | 11.1x |
+| `copyResize` to 1080 wide, cubic | 133 ms | 13 ms | 10.2x |
+| `copyResize` to 1080 wide, Lanczos3 (new) | n/a | 12 ms | |
+| `adjustColor` contrast + saturation | 2081 ms | 46 ms | 45.3x |
+| `gaussianBlur` radius 5 | 788 ms | 87 ms | 9.1x |
+| `copyRotate` 15 degrees, linear | 4126 ms | 56 ms | 74.2x |
+| `encodeJpg` quality 85 (2.92 MB vs 2.93 MB) | 429 ms | 118 ms | 3.6x |
+| `encodePng` level 6 (14.56 MB vs 14.78 MB) | 909 ms | 124 ms | 7.3x |
+| Upload flow, drop-ins (405 KB vs 398 KB) | 684 ms | 83 ms | 8.3x |
+| Upload flow, `RapidPipeline`, Lanczos3 (405 KB vs 359 KB) | 684 ms | 74 ms | 9.2x |
+
+Every row marked identical in the compatibility table above was identical on
+the phone too. `decodeJpg` reported a maximum difference of 73 from
+package:image. That is expected for a 4:2:0 photo: package:image repeats
+each half-resolution chroma sample (nearest neighbour), while rapid_image
+interpolates it as libjpeg-turbo does, so the two differ at sharp,
+saturated colour edges.
+
+#### Android
+
+Not measured yet.
+
 ### Web
 
 In the browser the image operations run as WebAssembly: the same Rust code,
